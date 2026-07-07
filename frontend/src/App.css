@@ -224,6 +224,14 @@
   padding: 10px;
 }
 
+/* Контент саб-окна не влезает после сплита — панель прокручивается сама.
+   Таблицы не трогаем: у них скроллится внутренний .table-shell. */
+.summary-panel,
+.settings-panel,
+.upload-panel {
+  overflow-y: auto;
+}
+
 .panel-header {
   display: flex;
   align-items: center;
