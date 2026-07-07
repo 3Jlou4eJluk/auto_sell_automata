@@ -1,0 +1,19 @@
+[project]
+name = "repricer-service"
+version = "0.1.0"
+description = "Сервис пересчёта цен прайса автозапчастей"
+requires-python = ">=3.9"
+dependencies = [
+    "openpyxl>=3.1",
+    "PyYAML>=6.0",
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart>=0.0.9",
+]
+
+[dependency-groups]
+dev = ["pytest>=8.0", "httpx>=0.27"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
