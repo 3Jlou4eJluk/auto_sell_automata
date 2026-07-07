@@ -26,22 +26,33 @@ from repricer.core import PriceResult, Rules, Status, compute_price
 REVIEW_SHEET = "На разбор"
 STATUS_HEADER = "Статус"
 
-# Обязательные колонки: нормализованный заголовок → ключ
+# Обязательные колонки (резолв только по заголовку; для склада есть фолбэк ниже)
 REQUIRED_COLUMNS = {
-    "#": "num",
     "артикул": "article",
+    "цена": "cost",
+    "min цена": "min_price",
+    "склад/цех": "warehouse",
+}
+# Опциональные: есть в 13-колоночном формате, могут отсутствовать в 8-колоночном.
+# Уценка из файла имеет приоритет над любым внешним справочником: если колонка
+# присутствует — берём её значения, внешние источники не опрашиваются.
+OPTIONAL_COLUMNS = {
+    "#": "num",
     "бренд": "brand",
     "номенклатура": "name",
     "количество": "qty",
-    "цена": "cost",
-    "min цена": "min_price",
     "цена согл с уценкой": "markdown",
+    "поставщик": "supplier",
     "новая цена": "new_price",
     "дельта ц.нов-себес": "delta",
-    "склад/цех": "warehouse",
 }
-OPTIONAL_COLUMNS = {"поставщик": "supplier"}
-HEADER_SEARCH_ROWS = 30
+# Ключи, которые всегда присутствуют в values строки (отсутствующая колонка → None)
+ROW_VALUE_KEYS = (
+    "num", "article", "brand", "name", "qty", "cost",
+    "min_price", "supplier", "markdown", "warehouse",
+)
+HEADER_SEARCH_ROWS = 5
+CONTENT_SAMPLE_ROWS = 50
 
 
 def _norm(value: object) -> str:
@@ -69,22 +80,74 @@ class RepriceReport:
 
 
 def find_header_row(ws: Worksheet) -> Optional[int]:
-    """Строка заголовка: A = '#', B = 'Артикул'. Не хардкодим номер строки."""
+    """Строка заголовка: в первых 5 строках есть ячейки «Артикул» и «Цена».
+
+    Позиции колонок не хардкодим — только содержимое заголовков.
+    """
     for row in range(1, min(HEADER_SEARCH_ROWS, ws.max_row) + 1):
-        if _norm(ws.cell(row, 1).value) == "#" and _norm(ws.cell(row, 2).value) == "артикул":
+        headers = {_norm(ws.cell(row, col).value) for col in range(1, ws.max_column + 1)}
+        if "артикул" in headers and "цена" in headers:
             return row
     return None
 
 
+def _column_signature(ws: Worksheet, header_row: int, col: int) -> Optional[str]:
+    """Тип содержимого беззаголовочной колонки: 'text' / 'number' / None (пусто/смешано)."""
+    texts = numbers = total = 0
+    for row in range(header_row + 1, min(header_row + CONTENT_SAMPLE_ROWS, ws.max_row) + 1):
+        value = ws.cell(row, col).value
+        if value is None or value == "":
+            continue
+        total += 1
+        if isinstance(value, str):
+            texts += 1
+        elif isinstance(value, (int, float)):
+            numbers += 1
+    if total == 0:
+        return None
+    if texts / total >= 0.9:
+        return "text"
+    if numbers / total >= 0.9:
+        return "number"
+    return None
+
+
 def map_columns(ws: Worksheet, header_row: int) -> Dict[str, int]:
-    """Заголовок → индекс колонки. Бросает ValueError, если обязательной колонки нет."""
+    """Заголовок → индекс колонки. Бросает ValueError, если обязательной колонки нет.
+
+    Фолбэк для «Склад/Цех»: в 8-колоночном формате у колонки склада нет заголовка.
+    Если заголовок не найден, ищем среди беззаголовочных колонок единственную
+    текстовую — это резолв по содержимому, а не по позиции. Неоднозначность — ошибка.
+    Аналогично «#»: единственная беззаголовочная числовая колонка.
+    """
     found: Dict[str, int] = {}
+    unheaded: List[int] = []
     for col in range(1, ws.max_column + 1):
         header = _norm(ws.cell(header_row, col).value)
+        if not header:
+            unheaded.append(col)
+            continue
         if header in REQUIRED_COLUMNS and REQUIRED_COLUMNS[header] not in found:
             found[REQUIRED_COLUMNS[header]] = col
         if header in OPTIONAL_COLUMNS and OPTIONAL_COLUMNS[header] not in found:
             found[OPTIONAL_COLUMNS[header]] = col
+
+    if "warehouse" not in found:
+        text_cols = [c for c in unheaded if _column_signature(ws, header_row, c) == "text"]
+        if len(text_cols) == 1:
+            found["warehouse"] = text_cols[0]
+        elif len(text_cols) > 1:
+            letters = ", ".join(get_column_letter(c) for c in text_cols)
+            raise ValueError(
+                f"Не удалось определить колонку «Склад/Цех»: заголовка нет, "
+                f"а текстовых колонок без заголовка несколько ({letters})"
+            )
+
+    if "num" not in found:
+        num_cols = [c for c in unheaded if _column_signature(ws, header_row, c) == "number"]
+        if len(num_cols) == 1:
+            found["num"] = num_cols[0]
+
     missing = [h for h, key in REQUIRED_COLUMNS.items() if key not in found]
     if missing:
         raise ValueError(f"Во входном файле не найдены колонки: {', '.join(missing)}")
@@ -119,20 +182,26 @@ def reprice_file(
     report = RepriceReport(sheet=sheet_name)
 
     c = cols  # короткий алиас
+
+    # Выходные колонки: если их нет во входном формате — дописываем в конец
+    next_free = ws_vals.max_column + 1
+    for key, header in (("new_price", "Новая цена"), ("delta", "дельта ц.нов-себес")):
+        if key not in c:
+            c[key] = next_free
+            ws_out.cell(header_row, c[key], header).font = Font(bold=True)
+            next_free += 1
+    status_col = next_free
+    ws_out.cell(header_row, status_col, STATUS_HEADER).font = Font(bold=True)
+
     k_letter = get_column_letter(c["new_price"])
     f_letter = get_column_letter(c["cost"])
 
-    # Колонка «Статус» — первая свободная после существующих
-    status_col = ws_vals.max_column + 1
-    ws_out.cell(header_row, status_col, STATUS_HEADER).font = Font(bold=True)
-    optional_keys = set(OPTIONAL_COLUMNS.values())
-
     for row in range(header_row + 1, ws_vals.max_row + 1):
-        vals = {key: ws_vals.cell(row, col).value for key, col in cols.items()}
-        for key in optional_keys:
+        vals = {key: ws_vals.cell(row, col).value for key, col in cols.items() if key in ROW_VALUE_KEYS}
+        for key in ROW_VALUE_KEYS:
             vals.setdefault(key, None)
-        # пропускаем полностью пустые строки (артикул, номенклатура и цены не заданы)
-        if all(vals[k] in (None, "") for k in ("article", "name", "cost", "min_price")):
+        # пропускаем пустые строки (ни артикула, ни цен)
+        if all(vals[k] in (None, "") for k in ("article", "cost", "min_price")):
             continue
 
         report.total += 1
@@ -149,10 +218,11 @@ def reprice_file(
         ws_out.cell(row, status_col, result.status)
 
         # Замораживаем формулу уценки (VLOOKUP на внешний файл) в значение
-        md_cell = ws_out.cell(row, c["markdown"])
-        if isinstance(md_cell.value, str) and md_cell.value.startswith("="):
-            cached = vals["markdown"]
-            md_cell.value = None if isinstance(cached, str) else cached
+        if "markdown" in c:
+            md_cell = ws_out.cell(row, c["markdown"])
+            if isinstance(md_cell.value, str) and md_cell.value.startswith("="):
+                cached = vals["markdown"]
+                md_cell.value = None if isinstance(cached, str) else cached
 
         item = RowOutcome(row=row, result=result, values=vals)
         report.all_rows.append(item)
