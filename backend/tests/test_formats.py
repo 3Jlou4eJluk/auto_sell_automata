@@ -101,13 +101,44 @@ def test_header_found_in_first_5_rows_only(tmp_path):
         reprice_file(inp, tmp_path / "out.xlsx", Rules())
 
 
-# --- Приёмка: оба реальных файла парсятся одним кодом, без флагов ---
+def test_markdown_synonym_and_operator_column_untouched(tmp_path):
+    # 15-колоночный вариант: «Уценка согл.» = уценка, «Нов цена-4%» — колонка
+    # оператора, которую не трогаем; склад без заголовка в конце
+    headers = [None, "Артикул", "Номенклатура", "Бренд", "Цена", "Min Цена",
+               "Поставщик", "Количество", "Уценка согл.", "Нов цена-4%", None]
+    rows = [
+        # база 960 < себест 2000, уценка 500 → 500*1.05 = 525
+        [1, "X1", "Деталь", "VAG", 2000, 1000, "site.ru", 2, 500, 777.77, "Склад А"],
+    ]
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Проценка"
+    for col, header in enumerate(headers, start=1):
+        ws.cell(2, col, header)
+    for col, value in enumerate(rows[0], start=1):
+        ws.cell(3, col, value)
+    inp = tmp_path / "in.xlsx"
+    wb.save(inp)
+
+    report = reprice_file(inp, tmp_path / "out.xlsx", Rules())
+    assert report.by_status == {"УЦЕНКА+5%": 1}
+
+    out = openpyxl.load_workbook(tmp_path / "out.xlsx")["Проценка"]
+    assert out.cell(3, 10).value == 777.77          # операторская «Нов цена-4%» не тронута
+    assert out.cell(3, 11).value == "Склад А"        # склад по фолбэку
+    assert out.cell(2, 12).value == "Новая цена"     # наши колонки дописаны после
+    assert out.cell(3, 12).value == 525
+    assert out.cell(2, 14).value == "Статус"
+
+
+# --- Приёмка: все реальные файлы парсятся одним кодом, без флагов ---
 
 @pytest.mark.parametrize(
     "fixture,expected_rows,has_markdown",
     [
         ("procenka_13col_2026-06-09.xlsx", 1180, True),
         ("procenka_8col_2026-07-06.xlsx", 1205, False),
+        ("procenka_15col_2026-07-06_markdown.xlsx", 1205, True),
     ],
 )
 def test_real_files_single_parser(tmp_path, fixture, expected_rows, has_markdown):
