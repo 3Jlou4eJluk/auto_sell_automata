@@ -659,6 +659,12 @@ function SummaryPanel(_props: unknown) {
 
       {error ? <div className="error-box">{error}</div> : null}
 
+      {summary?.warnings?.map((warning) => (
+        <div className="warning-box" key={warning}>
+          {warning}
+        </div>
+      ))}
+
       {summary ? (
         <>
           <div className="summary-grid">

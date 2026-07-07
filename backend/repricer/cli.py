@@ -49,6 +49,8 @@ def main(argv=None) -> int:
         return 1
 
     print(f"Лист: {report.sheet}")
+    for warning in report.warnings:
+        print(f"  ⚠ {warning}")
     print(f"Параметры: скидка от Min {rules.discount:.0%}, уценка +{rules.markdown_markup:.0%}, "
           f"себестоимость +{rules.cost_markup:.0%}, округление до {rules.rounding} руб.")
     print(f"Всего строк: {report.total}")

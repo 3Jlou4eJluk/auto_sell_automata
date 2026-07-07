@@ -76,6 +76,7 @@ class RepriceReport:
     by_status: Dict[str, int] = field(default_factory=dict)
     review_rows: List[RowOutcome] = field(default_factory=list)
     all_rows: List[RowOutcome] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
 
     @property
     def review_count(self) -> int:
@@ -183,6 +184,11 @@ def reprice_file(
     header_row = find_header_row(ws_vals)
     cols = map_columns(ws_vals, header_row)
     report = RepriceReport(sheet=sheet_name)
+    if "markdown" not in cols:
+        report.warnings.append(
+            "В файле нет колонки «Цена согл с уценкой» — правило уценки не применяется, "
+            "позиции ниже себестоимости считаются от себестоимости и чаще попадают в конфликт"
+        )
 
     c = cols  # короткий алиас
 

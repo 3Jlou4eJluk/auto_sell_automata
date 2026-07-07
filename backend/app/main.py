@@ -72,6 +72,7 @@ async def reprice(
             "total": report.total,
             "by_status": report.by_status,
             "review_count": report.review_count,
+            "warnings": report.warnings,
             "params": {
                 "discount": rules.discount,
                 "markdown_markup": rules.markdown_markup,

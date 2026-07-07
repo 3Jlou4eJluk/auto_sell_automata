@@ -12,6 +12,7 @@ export interface RepriceSummary {
   total: number
   by_status: Record<string, number>
   review_count: number
+  warnings?: string[]
   params: {
     discount: number
     markdown_markup: number

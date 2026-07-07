@@ -51,6 +51,7 @@ def test_reprice_happy_path(tmp_path):
         "total": 2,
         "by_status": {"OK": 1, "КОНФЛИКТ": 1},
         "review_count": 1,
+        "warnings": [],
         "params": {
             "discount": 0.04,
             "markdown_markup": 0.05,

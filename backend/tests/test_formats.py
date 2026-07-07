@@ -55,6 +55,20 @@ def test_8col_parses_and_appends_output_columns(tmp_path):
     assert ws.cell(4, 8).value == "Склад Уфа"
 
 
+def test_8col_missing_markdown_warns(tmp_path):
+    inp = make_8col(tmp_path / "in.xlsx", ROWS_8COL)
+    report = reprice_file(inp, tmp_path / "out.xlsx", Rules())
+    assert len(report.warnings) == 1
+    assert "Цена согл с уценкой" in report.warnings[0]
+
+
+def test_13col_with_markdown_no_warnings(tmp_path):
+    from tests.test_excel_io import ROWS, make_input
+    inp = make_input(tmp_path / "in.xlsx", ROWS)
+    report = reprice_file(inp, tmp_path / "out.xlsx", Rules())
+    assert report.warnings == []
+
+
 def test_8col_warehouse_resolved_without_header(tmp_path):
     inp = make_8col(tmp_path / "in.xlsx", ROWS_8COL)
     report = reprice_file(inp, tmp_path / "out.xlsx", Rules())

@@ -535,6 +535,17 @@ button:focus-visible {
   max-width: 560px;
 }
 
+/* Ненавязчивое предупреждение — приглушённый янтарный, без крика */
+.warning-box {
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  border-left: 3px solid #d9a441;
+  background: #fdf7ea;
+  color: #7a5c1e;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+
 .inline-state {
   display: inline-flex;
   align-items: center;
