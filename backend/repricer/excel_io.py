@@ -21,7 +21,7 @@ from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
-from repricer.core import PriceResult, Rules, Status, compute_price
+from repricer.core import PriceResult, Rules, Status, compute_price, parse_number
 
 REVIEW_SHEET = "На разбор"
 STATUS_HEADER = "Статус"
@@ -67,6 +67,14 @@ class RowOutcome:
     row: int                 # номер строки листа Excel
     result: PriceResult
     values: dict             # исходные значения строки (для листа «На разбор»)
+    effective_min: Optional[Decimal] = None  # Min цена группы дублей, если она подменила собственную
+
+
+def _article_key(value: object) -> Optional[str]:
+    if value is None:
+        return None
+    key = str(value).strip()
+    return key or None
 
 
 @dataclass
@@ -205,6 +213,12 @@ def reprice_file(
     k_letter = get_column_letter(c["new_price"])
     f_letter = get_column_letter(c["cost"])
 
+    # Проход 1: собрать строки и минимальную Min цену по каждому артикулу.
+    # У дублей (разные партии одного артикула) рыночные цены могут расходиться —
+    # репрезентативной считается МИНИМАЛЬНАЯ из них, все партии считаются от неё.
+    pending = []
+    group_min: Dict[str, Decimal] = {}
+    group_size: Dict[str, int] = {}
     for row in range(header_row + 1, ws_vals.max_row + 1):
         vals = {key: ws_vals.cell(row, col).value for key, col in cols.items() if key in ROW_VALUE_KEYS}
         for key in ROW_VALUE_KEYS:
@@ -212,9 +226,31 @@ def reprice_file(
         # пропускаем пустые строки (ни артикула, ни цен)
         if all(vals[k] in (None, "") for k in ("article", "cost", "min_price")):
             continue
+        pending.append((row, vals))
+        art = _article_key(vals["article"])
+        if art:
+            group_size[art] = group_size.get(art, 0) + 1
+            own_min = parse_number(vals["min_price"])
+            if own_min is not None and own_min > 0:
+                if art not in group_min or own_min < group_min[art]:
+                    group_min[art] = own_min
+
+    # Проход 2: расчёт (с подменённой Min ценой для дублей)
+    substituted: set = set()
+    for row, vals in pending:
+        effective_min = vals["min_price"]
+        row_effective: Optional[Decimal] = None
+        art = _article_key(vals["article"])
+        if art and group_size.get(art, 0) > 1:
+            gmin = group_min.get(art)
+            own_min = parse_number(vals["min_price"])
+            if gmin is not None and (own_min is None or own_min <= 0 or gmin < own_min):
+                effective_min = gmin
+                row_effective = gmin
+                substituted.add(art)
 
         report.total += 1
-        result = compute_price(vals["cost"], vals["min_price"], vals["markdown"], rules)
+        result = compute_price(vals["cost"], effective_min, vals["markdown"], rules)
         report.by_status[result.status] = report.by_status.get(result.status, 0) + 1
 
         if result.new_price is not None:
@@ -233,10 +269,16 @@ def reprice_file(
                 cached = vals["markdown"]
                 md_cell.value = None if isinstance(cached, str) else cached
 
-        item = RowOutcome(row=row, result=result, values=vals)
+        item = RowOutcome(row=row, result=result, values=vals, effective_min=row_effective)
         report.all_rows.append(item)
         if result.for_review:
             report.review_rows.append(item)
+
+    if substituted:
+        report.warnings.append(
+            f"У {len(substituted)} артикулов несколько партий с разной Min ценой — "
+            f"расчёт выполнен от минимальной из них как самой репрезентативной"
+        )
 
     _write_review_sheet(wb_out, report)
     wb_out.save(output_path)

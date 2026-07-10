@@ -905,11 +905,23 @@ function RowsTable({
       {
         accessorKey: 'min_price',
         header: 'Min Цена',
-        cell: (info) => (
-          <span className="numeric">
-            {formatNumber(info.getValue<number | null>())}
-          </span>
-        ),
+        cell: (info) => {
+          const effective = info.row.original.effective_min_price
+          return (
+            <span className="numeric">
+              {formatNumber(info.getValue<number | null>())}
+              {typeof effective === 'number' ? (
+                <span
+                  className="min-substituted"
+                  title="У артикула несколько партий с разной Min ценой — расчёт от минимальной"
+                >
+                  {' '}
+                  → {nf.format(effective)}
+                </span>
+              ) : null}
+            </span>
+          )
+        },
       },
       {
         accessorKey: 'supplier',

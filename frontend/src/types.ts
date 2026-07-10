@@ -30,6 +30,7 @@ export interface RepriceRow {
   qty: number | null
   cost: number | null
   min_price: number | null
+  effective_min_price: number | null
   supplier: string | null
   markdown: number | null
   new_price: number | null

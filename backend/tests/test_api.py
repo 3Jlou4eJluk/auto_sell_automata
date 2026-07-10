@@ -70,6 +70,7 @@ def test_reprice_happy_path(tmp_path):
         "qty": 10,
         "cost": 500,
         "min_price": 1000,
+        "effective_min_price": None,
         "supplier": "site.ru",
         "markdown": None,
         "new_price": 960,

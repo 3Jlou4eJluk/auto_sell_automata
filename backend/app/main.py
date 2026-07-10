@@ -115,6 +115,7 @@ def _row_to_api(item: RowOutcome) -> dict:
         "qty": _value(v["qty"]),
         "cost": _value(v["cost"]),
         "min_price": _value(v["min_price"]),
+        "effective_min_price": _number(item.effective_min) if item.effective_min is not None else None,
         "supplier": _value(v["supplier"]),
         "markdown": _value(v["markdown"], null_excel_error=True),
         "new_price": new_price,

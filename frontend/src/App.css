@@ -535,6 +535,11 @@ button:focus-visible {
   max-width: 560px;
 }
 
+.min-substituted {
+  color: #b07d1e;
+  white-space: nowrap;
+}
+
 /* Ненавязчивое предупреждение — приглушённый янтарный, без крика */
 .warning-box {
   padding: 8px 10px;
