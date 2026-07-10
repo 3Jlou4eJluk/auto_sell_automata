@@ -454,9 +454,6 @@ function TopMenu({
   const [seenChangelogId, setSeenChangelogId] = useState<string | null>(
     readSeenChangelogId,
   )
-  const [openNewsUnreadIds, setOpenNewsUnreadIds] = useState<Set<string>>(
-    () => new Set(),
-  )
   const openFile = useRepriceStore((state) => state.openFile)
   const download = useRepriceStore((state) => state.download)
   const reset = useRepriceStore((state) => state.reset)
@@ -502,28 +499,6 @@ function TopMenu({
     }
   }, [])
 
-  useEffect(() => {
-    if (openMenu !== 'news' || changelogEntries.length === 0) {
-      return
-    }
-
-    const latestId = changelogEntries[0].id
-
-    if (seenChangelogId === latestId) {
-      return
-    }
-
-    setOpenNewsUnreadIds((current) => {
-      if (current.size > 0) {
-        return current
-      }
-
-      return new Set(unreadEntries.map((entry) => entry.id))
-    })
-    saveSeenChangelogId(latestId)
-    setSeenChangelogId(latestId)
-  }, [changelogEntries, openMenu, seenChangelogId, unreadEntries])
-
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -540,21 +515,16 @@ function TopMenu({
   }
 
   const toggleNews = () => {
-    if (openMenu === 'news') {
-      setOpenMenu(null)
-      return
-    }
+    setOpenMenu((current) => (current === 'news' ? null : 'news'))
+  }
 
-    setOpenNewsUnreadIds(new Set(unreadEntries.map((entry) => entry.id)))
-
+  // Индикатор новизны снимается только явной кнопкой «Прочитать все»
+  const markAllNewsRead = () => {
     const latestId = changelogEntries[0]?.id
-
     if (latestId) {
       saveSeenChangelogId(latestId)
       setSeenChangelogId(latestId)
     }
-
-    setOpenMenu('news')
   }
 
   const runMenuAction = (action: () => void) => {
@@ -679,7 +649,8 @@ function TopMenu({
           {openMenu === 'news' ? (
             <ChangelogDropdown
               entries={changelogEntries}
-              unreadIds={openNewsUnreadIds}
+              unreadIds={new Set(unreadEntries.map((entry) => entry.id))}
+              onMarkAllRead={markAllNewsRead}
             />
           ) : null}
         </div>
@@ -717,12 +688,21 @@ function BellIcon() {
 function ChangelogDropdown({
   entries,
   unreadIds,
+  onMarkAllRead,
 }: {
   entries: ChangelogEntry[]
   unreadIds: ReadonlySet<string>
+  onMarkAllRead: () => void
 }) {
   return (
     <div className="menu-dropdown news-dropdown" role="dialog" aria-label="Что нового">
+      {unreadIds.size > 0 ? (
+        <div className="news-actions">
+          <button type="button" className="news-mark-read" onClick={onMarkAllRead}>
+            Прочитать все
+          </button>
+        </div>
+      ) : null}
       {entries.length > 0 ? (
         <div className="news-list">
           {entries.map((entry) => {

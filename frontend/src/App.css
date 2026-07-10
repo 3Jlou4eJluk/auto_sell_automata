@@ -185,6 +185,27 @@
   display: grid;
 }
 
+.news-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 4px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.news-mark-read {
+  border: 0;
+  background: transparent;
+  color: var(--accent-strong);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 2px 4px;
+}
+
+.news-mark-read:hover {
+  text-decoration: underline;
+}
+
 .news-entry {
   padding: 4px 4px 10px;
 }
