@@ -80,12 +80,20 @@
   height: 100%;
 }
 
+.menu-actions {
+  height: 100%;
+  display: flex;
+  align-items: stretch;
+  margin-left: auto;
+}
+
 .menu-root {
   position: relative;
   display: flex;
 }
 
 .menu-root-button,
+.news-button,
 .menu-item,
 .ghost-button,
 .primary-button {
@@ -106,6 +114,50 @@
   background: #dde6f2;
 }
 
+.news-menu-root {
+  align-items: stretch;
+}
+
+.news-button {
+  height: 100%;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 0 11px;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.news-button:hover,
+.news-button.is-open {
+  background: #dde6f2;
+}
+
+.news-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+}
+
+.news-badge {
+  min-width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
 .menu-dropdown,
 .submenu {
   min-width: 230px;
@@ -119,6 +171,78 @@
   position: absolute;
   top: 39px;
   left: 0;
+}
+
+.news-dropdown {
+  left: auto;
+  right: 0;
+  width: min(360px, calc(100vw - 20px));
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.news-list {
+  display: grid;
+}
+
+.news-entry {
+  padding: 4px 4px 10px;
+}
+
+.news-entry + .news-entry {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.news-date {
+  display: block;
+  margin-left: 16px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.news-title-row {
+  display: grid;
+  grid-template-columns: 8px minmax(0, 1fr);
+  align-items: start;
+  gap: 8px;
+  margin-top: 3px;
+}
+
+.news-title-row h2 {
+  margin: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.3;
+  font-weight: 700;
+}
+
+.news-unread-dot {
+  width: 7px;
+  height: 7px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.news-unread-spacer {
+  width: 7px;
+  height: 7px;
+}
+
+.news-entry p {
+  margin: 5px 4px 0 16px;
+  color: var(--muted-strong);
+  font-size: 12.5px;
+  line-height: 1.45;
+  white-space: normal;
+}
+
+.news-empty {
+  padding: 12px 10px;
+  color: var(--muted);
+  font-size: 13px;
 }
 
 .menu-item {

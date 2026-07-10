@@ -28,6 +28,11 @@ import {
   DockviewReact,
   type DockviewPanelComponent,
 } from './dockview-react'
+import {
+  CHANGELOG_SEEN_STORAGE_KEY,
+  fetchChangelog,
+  type ChangelogEntry,
+} from './changelog'
 import { useRepriceStore } from './store'
 import type { RepriceRow, Rounding } from './types'
 
@@ -50,6 +55,14 @@ const nf = new Intl.NumberFormat('ru-RU', {
 const percentNf = new Intl.NumberFormat('ru-RU', {
   maximumFractionDigits: 2,
 })
+
+const changelogDateFormatter = new Intl.DateTimeFormat('ru-RU', {
+  day: 'numeric',
+  month: 'long',
+  year: 'numeric',
+})
+
+type OpenMenu = 'file' | 'windows' | 'help' | 'news' | null
 
 function isPanelKind(value: string): value is PanelKind {
   return PANEL_KINDS.includes(value as PanelKind)
@@ -183,6 +196,52 @@ function formatText(value: unknown): string {
 
 function formatPercent(value: number): string {
   return `${percentNf.format(value * 100)}%`
+}
+
+function formatChangelogDate(value: string): string {
+  const date = new Date(`${value}T00:00:00`)
+
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  const parts = changelogDateFormatter.formatToParts(date)
+  const day = parts.find((part) => part.type === 'day')?.value
+  const month = parts.find((part) => part.type === 'month')?.value
+  const year = parts.find((part) => part.type === 'year')?.value
+
+  return day && month && year ? `${day} ${month} ${year}` : value
+}
+
+function readSeenChangelogId(): string | null {
+  try {
+    return localStorage.getItem(CHANGELOG_SEEN_STORAGE_KEY)
+  } catch {
+    return null
+  }
+}
+
+function saveSeenChangelogId(id: string): void {
+  try {
+    localStorage.setItem(CHANGELOG_SEEN_STORAGE_KEY, id)
+  } catch {}
+}
+
+function getUnreadChangelogEntries(
+  entries: ChangelogEntry[],
+  seenId: string | null,
+): ChangelogEntry[] {
+  if (entries.length === 0) {
+    return []
+  }
+
+  if (!seenId) {
+    return entries
+  }
+
+  const seenIndex = entries.findIndex((entry) => entry.id === seenId)
+
+  return seenIndex >= 0 ? entries.slice(0, seenIndex) : entries
 }
 
 function roundingLabel(rounding: Rounding): string {
@@ -388,13 +447,24 @@ function TopMenu({
 }) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const [openMenu, setOpenMenu] = useState<'file' | 'windows' | 'help' | null>(
-    null,
+  const [openMenu, setOpenMenu] = useState<OpenMenu>(null)
+  const [changelogEntries, setChangelogEntries] = useState<ChangelogEntry[]>(
+    [],
+  )
+  const [seenChangelogId, setSeenChangelogId] = useState<string | null>(
+    readSeenChangelogId,
+  )
+  const [openNewsUnreadIds, setOpenNewsUnreadIds] = useState<Set<string>>(
+    () => new Set(),
   )
   const openFile = useRepriceStore((state) => state.openFile)
   const download = useRepriceStore((state) => state.download)
   const reset = useRepriceStore((state) => state.reset)
   const result = useRepriceStore((state) => state.result)
+  const unreadEntries = useMemo(
+    () => getUnreadChangelogEntries(changelogEntries, seenChangelogId),
+    [changelogEntries, seenChangelogId],
+  )
 
   useEffect(() => {
     function handlePointerDown(event: PointerEvent) {
@@ -418,6 +488,42 @@ function TopMenu({
     }
   }, [])
 
+  useEffect(() => {
+    let ignore = false
+
+    void fetchChangelog().then((entries) => {
+      if (!ignore) {
+        setChangelogEntries(entries)
+      }
+    })
+
+    return () => {
+      ignore = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (openMenu !== 'news' || changelogEntries.length === 0) {
+      return
+    }
+
+    const latestId = changelogEntries[0].id
+
+    if (seenChangelogId === latestId) {
+      return
+    }
+
+    setOpenNewsUnreadIds((current) => {
+      if (current.size > 0) {
+        return current
+      }
+
+      return new Set(unreadEntries.map((entry) => entry.id))
+    })
+    saveSeenChangelogId(latestId)
+    setSeenChangelogId(latestId)
+  }, [changelogEntries, openMenu, seenChangelogId, unreadEntries])
+
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = ''
@@ -427,6 +533,28 @@ function TopMenu({
     }
 
     setOpenMenu(null)
+  }
+
+  const toggleMenu = (menu: Exclude<OpenMenu, null>) => {
+    setOpenMenu((current) => (current === menu ? null : menu))
+  }
+
+  const toggleNews = () => {
+    if (openMenu === 'news') {
+      setOpenMenu(null)
+      return
+    }
+
+    setOpenNewsUnreadIds(new Set(unreadEntries.map((entry) => entry.id)))
+
+    const latestId = changelogEntries[0]?.id
+
+    if (latestId) {
+      saveSeenChangelogId(latestId)
+      setSeenChangelogId(latestId)
+    }
+
+    setOpenMenu('news')
   }
 
   const runMenuAction = (action: () => void) => {
@@ -453,7 +581,7 @@ function TopMenu({
         <MenuRootButton
           label="Файл"
           open={openMenu === 'file'}
-          onClick={() => setOpenMenu(openMenu === 'file' ? null : 'file')}
+          onClick={() => toggleMenu('file')}
         >
           <MenuItem
             onClick={() => runMenuAction(() => fileInputRef.current?.click())}
@@ -475,9 +603,7 @@ function TopMenu({
         <MenuRootButton
           label="Окна"
           open={openMenu === 'windows'}
-          onClick={() =>
-            setOpenMenu(openMenu === 'windows' ? null : 'windows')
-          }
+          onClick={() => toggleMenu('windows')}
         >
           <div className="menu-item has-submenu" role="menuitem">
             <span>Показать панель</span>
@@ -521,12 +647,109 @@ function TopMenu({
         <MenuRootButton
           label="Справка"
           open={openMenu === 'help'}
-          onClick={() => setOpenMenu(openMenu === 'help' ? null : 'help')}
+          onClick={() => toggleMenu('help')}
         >
           <MenuItem onClick={() => runMenuAction(onAbout)}>О программе</MenuItem>
         </MenuRootButton>
       </div>
+
+      <div className="menu-actions">
+        <div className="menu-root news-menu-root">
+          <button
+            type="button"
+            className={`news-button${openMenu === 'news' ? ' is-open' : ''}`}
+            aria-label={
+              unreadEntries.length > 0
+                ? `Что нового, непрочитанных: ${unreadEntries.length}`
+                : 'Что нового'
+            }
+            aria-haspopup="dialog"
+            aria-expanded={openMenu === 'news'}
+            onClick={toggleNews}
+          >
+            <BellIcon />
+            <span>Что нового</span>
+            {unreadEntries.length > 0 ? (
+              <span className="news-badge" aria-hidden="true">
+                {unreadEntries.length > 99 ? '99+' : unreadEntries.length}
+              </span>
+            ) : null}
+          </button>
+
+          {openMenu === 'news' ? (
+            <ChangelogDropdown
+              entries={changelogEntries}
+              unreadIds={openNewsUnreadIds}
+            />
+          ) : null}
+        </div>
+      </div>
     </header>
+  )
+}
+
+function BellIcon() {
+  return (
+    <svg
+      className="news-icon"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path
+        d="M6.8 10.4c0-3.2 2.1-5.6 5.2-5.6s5.2 2.4 5.2 5.6v2.7l1.6 2.8H5.2l1.6-2.8v-2.7Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M9.6 18.3c.4 1.1 1.2 1.7 2.4 1.7s2-.6 2.4-1.7"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+      />
+    </svg>
+  )
+}
+
+function ChangelogDropdown({
+  entries,
+  unreadIds,
+}: {
+  entries: ChangelogEntry[]
+  unreadIds: ReadonlySet<string>
+}) {
+  return (
+    <div className="menu-dropdown news-dropdown" role="dialog" aria-label="Что нового">
+      {entries.length > 0 ? (
+        <div className="news-list">
+          {entries.map((entry) => {
+            const unread = unreadIds.has(entry.id)
+
+            return (
+              <article className="news-entry" key={entry.id}>
+                <time className="news-date" dateTime={entry.date}>
+                  {formatChangelogDate(entry.date)}
+                </time>
+                <div className="news-title-row">
+                  {unread ? (
+                    <span className="news-unread-dot" aria-hidden="true" />
+                  ) : (
+                    <span className="news-unread-spacer" aria-hidden="true" />
+                  )}
+                  <h2>{entry.title}</h2>
+                </div>
+                <p>{entry.body}</p>
+              </article>
+            )
+          })}
+        </div>
+      ) : (
+        <div className="news-empty">Обновлений пока нет</div>
+      )}
+    </div>
   )
 }
 
